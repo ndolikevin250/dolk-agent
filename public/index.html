@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dolk_agent AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+<div class="overlay" id="overlay" onclick="closeMobile()"></div>
+
+<!-- APPLY MODAL -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-title">Preparing your application</div>
+        <div class="modal-sub" id="modal-sub">You approve every step — nothing sends without your confirmation</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-steps" id="modal-steps">
+      <div class="mstep active" id="mstep-1"><div class="msdot" id="msdot-1">1</div><div class="mslabel">Detect</div></div>
+      <div class="mstep" id="mstep-2"><div class="msdot" id="msdot-2">2</div><div class="mslabel">Review</div></div>
+      <div class="mstep" id="mstep-3"><div class="msdot" id="msdot-3">3</div><div class="mslabel">Edit</div></div>
+      <div class="mstep" id="mstep-4"><div class="msdot" id="msdot-4">4</div><div class="mslabel">Confirm</div></div>
+      <div class="mstep" id="mstep-5"><div class="msdot" id="msdot-5">5</div><div class="mslabel">Send</div></div>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <div style="text-align:center;padding:20px 0;color:var(--text3);font-size:13px;"><span class="spinner" style="border-top-color:var(--accent);"></span> Loading…</div>
+    </div>
+    <div class="modal-footer" id="modal-footer">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-next" id="main-action-btn" disabled>Continue →</button>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon"><svg viewBox="0 0 16 16" fill="none"><path d="M8 2L14 5v6L8 14 2 11V5L8 2z" stroke="white" stroke-width="1.2"/><circle cx="8" cy="8" r="2" fill="white"/></svg></div>
+        <div><div>Dolk_agent AI</div><div class="logo-sub">Your personal job hunter</div></div>
+      </div>
+    </div>
+    <div class="steps">
+      <div class="step active" id="step-1"><div class="step-num" id="step-num-1">1</div><div><div class="step-name">Upload CV</div><div class="step-hint">PDF, DOCX or TXT</div></div></div>
+      <div class="step-connector"></div>
+      <div class="step" id="step-2"><div class="step-num" id="step-num-2">2</div><div><div class="step-name">Tell the agent</div><div class="step-hint">Role, location, preferences</div></div></div>
+      <div class="step-connector"></div>
+      <div class="step" id="step-3"><div class="step-num" id="step-num-3">3</div><div><div class="step-name">AI searches jobs</div><div class="step-hint">Live listings matched to you</div></div></div>
+      <div class="step-connector"></div>
+      <div class="step" id="step-4"><div class="step-num" id="step-num-4">4</div><div><div class="step-name">Review &amp; apply</div><div class="step-hint">You approve every email sent</div></div></div>
+    </div>
+    <div class="cv-status">
+      <div class="cv-status-label">CV Status</div>
+      <div class="cv-empty" id="cv-empty">No CV uploaded yet</div>
+      <div class="cv-file-row" id="cv-file-row" style="display:none">
+        <div class="cv-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke="#a99ef9" stroke-width="1"/><path d="M4.5 4.5h5M4.5 7h4M4.5 9.5h3" stroke="#a99ef9" stroke-width=".9"/></svg></div>
+        <div><div class="cv-name" id="cv-filename">-</div><div class="cv-sub" id="cv-sidebar-sub">Ready</div></div>
+      </div>
+    </div>
+    <div class="match-counter" id="match-counter"><div class="match-counter-num" id="match-num">0</div><div class="match-counter-label">jobs matched to your CV</div></div>
+    <div class="applied-tracker" id="applied-tracker"><div class="applied-tracker-label">Applications prepared</div><div id="applied-list"></div></div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <button class="hamburger" onclick="toggleSidebar()"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 3.5h10M2 7h10M2 10.5h10" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <div class="topbar-title">Chat with your agent</div>
+      <div class="status-dot" id="status-dot"></div>
+      <div class="status-text" id="status-text">Ready</div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress" style="width:10%"></div></div>
+    <div class="panels">
+      <div class="chat-panel">
+        <div id="upload-zone" class="upload-zone"
+          onclick="document.getElementById('file-input').click()"
+          ondragover="event.preventDefault();this.classList.add('drag')"
+          ondragleave="this.classList.remove('drag')"
+          ondrop="handleDrop(event)">
+          <div class="upload-zone-icon">📄</div>
+          <div class="upload-zone-title">Drop your CV here to start</div>
+          <div class="upload-zone-sub">PDF, DOCX or TXT · Max 5MB</div>
+          <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('file-input').click()">Browse file</button>
+          <input type="file" id="file-input" accept=".pdf,.doc,.docx,.txt" onchange="handleFile(this.files[0])"/>
+        </div>
+        <div class="messages" id="messages"></div>
+        <div class="quick-replies" id="quick-replies" style="display:none"></div>
+        <div class="input-bar" id="input-bar" style="display:none">
+          <textarea class="chat-input" id="chat-input" placeholder="Type your message…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="send-btn" onclick="sendMessage()"><svg viewBox="0 0 16 16" fill="none"><path d="M2 14L14 8 2 2v4.5l7 1.5-7 1.5V14z" fill="white"/></svg></button>
+        </div>
+      </div>
+      <div class="jobs-panel" id="jobs-panel">
+        <div class="jobs-header"><div class="jobs-title">Job Matches</div><div class="jobs-count" id="jobs-count">0 found</div></div>
+        <div class="jobs-list" id="jobs-list">
+          <div class="jobs-empty"><div class="jobs-empty-icon">🔍</div><div class="jobs-empty-text">Job matches will appear here once the agent finishes searching.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
