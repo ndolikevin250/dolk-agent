@@ -1,7 +1,24 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s \"https://remotive.com/api/remote-jobs?search=hospitality&limit=5\")"
+      "Bash(curl -s \"https://remotive.com/api/remote-jobs?search=hospitality&limit=5\")",
+      "Bash(node -e \":*)",
+      "Bash(nslookup:*)",
+      "Bash(node -e \"console.log\\(''mongoose:'', require\\(''mongoose''\\).version\\); console.log\\(''mongodb driver:'', require\\(''mongodb/package.json''\\).version\\);\")",
+      "Bash(curl:*)",
+      "Read(//c/Users/HP/Downloads/**)",
+      "Bash(node:*)",
+      "WebFetch(domain:momodeveloper.mtn.com)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:momodevelopercommunity.mtn.com)",
+      "WebFetch(domain:momodeveloper.mtn.co.rw)",
+      "WebFetch(domain:momoapi.mtn.co.rw)",
+      "Bash(npm run:*)",
+      "Read(//tmp/**)",
+      "Bash(jobs -l)",
+      "Bash(pkill -f \"nodemon\")",
+      "Bash(pkill -f \"node server.js\")"
     ]
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "dolk_agent",
   "version": "1.0.0",
-  "description": "",
+  "description": "AI-powered job search and application platform for Rwanda and East Africa",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -9,17 +9,24 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": "Dolk Agent",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.1",
+    "firebase-admin": "^13.7.0",
+    "helmet": "^8.1.0",
     "mammoth": "^1.12.0",
     "mongoose": "^9.3.1",
-    "nodemailer": "^8.0.3"
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.3",
+    "undici": "^8.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

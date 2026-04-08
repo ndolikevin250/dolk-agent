@@ -1,0 +1,62 @@
+services:
+  - type: web
+    name: dolk-agent
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: JSEARCH_API_KEY
+        sync: false
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM_NAME
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: FIREBASE_API_KEY
+        sync: false
+      - key: FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: MOMO_COLLECTION_SUBSCRIPTION_KEY
+        sync: false
+      - key: MOMO_API_USER_ID
+        sync: false
+      - key: MOMO_API_KEY
+        sync: false
+      - key: MOMO_TARGET_ENVIRONMENT
+        sync: false
+      - key: MOMO_CURRENCY
+        sync: false
+      - key: MOMO_BASE_URL
+        sync: false
+      - key: MOMO_CALLBACK_URL
+        sync: false
+      - key: PRO_PRICE_RWF
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SERPAPI_KEY
+        sync: false

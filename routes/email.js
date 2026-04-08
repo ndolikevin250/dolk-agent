@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
-const Session = require('../models/Session');
-const Application = require('../models/Application');
+const { getCVForUser } = require('./cv');
+const { requireAuth } = require('../middleware/auth');
+const { checkApplicationLimit, incrementApplications } = require('../middleware/usage');
+const stats = require('../lib/stats');
 
 const emailLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -30,12 +32,16 @@ function createTransporter() {
 }
 
 // Send application email
-router.post('/send-email', emailLimiter, async (req, res) => {
+router.post('/send-email', emailLimiter, requireAuth, checkApplicationLimit, async (req, res) => {
   try {
-    const { sessionId, emailTo, subject, body, jobTitle, company, location, jobUrl, matchScore, attachCV } = req.body;
+    if (!req.user.emailVerified) {
+      return res.status(403).json({ error: 'Please verify your email address before sending applications. Check your inbox for a verification link.' });
+    }
 
-    if (!sessionId || !emailTo || !subject || !body || !jobTitle || !company) {
-      return res.status(400).json({ error: 'Missing required fields: sessionId, emailTo, subject, body, jobTitle, company' });
+    const { emailTo, subject, body, jobTitle, company, location, jobUrl, matchScore, attachCV } = req.body;
+
+    if (!emailTo || !subject || !body || !jobTitle || !company) {
+      return res.status(400).json({ error: 'Missing required fields: emailTo, subject, body, jobTitle, company' });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -43,8 +49,12 @@ router.post('/send-email', emailLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Invalid email address' });
     }
 
-    if (subject.length > 200) return res.status(400).json({ error: 'Subject too long (max 200 chars)' });
-    if (body.length > 10000) return res.status(400).json({ error: 'Email body too long (max 10000 chars)' });
+    if (typeof subject !== 'string' || subject.length > 200) return res.status(400).json({ error: 'Subject too long (max 200 chars)' });
+    if (typeof body !== 'string' || body.length > 10000) return res.status(400).json({ error: 'Email body too long (max 10000 chars)' });
+    if (typeof jobTitle !== 'string' || jobTitle.length > 200) return res.status(400).json({ error: 'Job title too long (max 200 chars)' });
+    if (typeof company !== 'string' || company.length > 200) return res.status(400).json({ error: 'Company name too long (max 200 chars)' });
+    if (location && (typeof location !== 'string' || location.length > 200)) return res.status(400).json({ error: 'Location too long (max 200 chars)' });
+    if (jobUrl && (typeof jobUrl !== 'string' || jobUrl.length > 2000)) return res.status(400).json({ error: 'Job URL too long (max 2000 chars)' });
 
     const transporter = createTransporter();
     if (!transporter) {
@@ -54,22 +64,24 @@ router.post('/send-email', emailLimiter, async (req, res) => {
     const fromName = process.env.SMTP_FROM_NAME || 'Dolk Agent';
     const fromEmail = process.env.SMTP_USER;
 
+    const applicantEmail = req.user.email || fromEmail;
+    const applicantName = req.user.name || '';
     const mailOptions = {
       from: `"${fromName}" <${fromEmail}>`,
       to: emailTo,
       subject,
       text: body,
-      replyTo: fromEmail
+      replyTo: applicantName ? `"${applicantName}" <${applicantEmail}>` : applicantEmail
     };
 
     let didAttachCV = false;
     if (attachCV) {
-      const session = await Session.findOne({ sessionId });
-      if (session && session.cvFile && session.cvFile.length > 0) {
+      const cvData = await getCVForUser(req.firebaseUid);
+      if (cvData && cvData.buffer && cvData.buffer.length > 0) {
         mailOptions.attachments = [{
-          filename: session.cvName || 'CV.pdf',
-          content: session.cvFile,
-          contentType: session.cvMimeType || 'application/pdf'
+          filename: cvData.name || 'CV.pdf',
+          content: cvData.buffer,
+          contentType: cvData.mimeType || 'application/pdf'
         }];
         didAttachCV = true;
       }
@@ -80,23 +92,14 @@ router.post('/send-email', emailLimiter, async (req, res) => {
     const followUpDate = new Date();
     followUpDate.setDate(followUpDate.getDate() + 7);
 
-    const application = await Application.create({
-      sessionId,
-      jobTitle,
-      company,
-      location: location || '',
-      emailTo,
-      subject,
-      body,
-      cvAttached: didAttachCV,
-      status: 'sent',
-      jobUrl: jobUrl || '',
-      matchScore: matchScore || 0,
-      followUpDate
-    });
+    // Increment daily application counter (persisted on User model)
+    if (req.user) await incrementApplications(req.user);
 
-    console.log(`Email sent: "${subject}" → ${emailTo} (app ID: ${application._id})`);
-    res.json({ ok: true, applicationId: application._id, followUpDate });
+    // Increment in-memory stat counter
+    stats.totalApplicationsSent++;
+
+    console.log(`Email sent: "${subject}" -> ${emailTo} (CV attached: ${didAttachCV})`);
+    res.json({ ok: true, followUpDate, cvAttached: didAttachCV });
   } catch (err) {
     console.error('Send email error:', err);
     if (err.code === 'EAUTH') {
@@ -106,18 +109,20 @@ router.post('/send-email', emailLimiter, async (req, res) => {
   }
 });
 
-// Send follow-up email
-router.post('/send-followup', emailLimiter, async (req, res) => {
+// Send follow-up email (accepts data directly — no DB lookup)
+router.post('/send-followup', emailLimiter, requireAuth, async (req, res) => {
   try {
-    const { applicationId, subject, body } = req.body;
-    if (!applicationId || !subject || !body) {
-      return res.status(400).json({ error: 'Missing required fields: applicationId, subject, body' });
+    const { emailTo, subject, body } = req.body;
+    if (!emailTo || !subject || !body) {
+      return res.status(400).json({ error: 'Missing required fields: emailTo, subject, body' });
     }
     if (subject.length > 200) return res.status(400).json({ error: 'Subject too long' });
     if (body.length > 10000) return res.status(400).json({ error: 'Body too long' });
 
-    const application = await Application.findById(applicationId);
-    if (!application) return res.status(404).json({ error: 'Application not found' });
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailTo)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
 
     const transporter = createTransporter();
     if (!transporter) {
@@ -129,17 +134,13 @@ router.post('/send-followup', emailLimiter, async (req, res) => {
 
     await transporter.sendMail({
       from: `"${fromName}" <${fromEmail}>`,
-      to: application.emailTo,
+      to: emailTo,
       subject,
       text: body,
       replyTo: fromEmail
     });
 
-    application.status = 'followed_up';
-    application.followedUpAt = new Date();
-    await application.save();
-
-    console.log(`Follow-up sent: "${subject}" → ${application.emailTo}`);
+    console.log(`Follow-up sent: "${subject}" -> ${emailTo}`);
     res.json({ ok: true });
   } catch (err) {
     console.error('Follow-up error:', err);
@@ -148,7 +149,7 @@ router.post('/send-followup', emailLimiter, async (req, res) => {
 });
 
 // Check email config status
-router.get('/email-status', (req, res) => {
+router.get('/email-status', requireAuth, (req, res) => {
   const configured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
   res.json({
     configured,

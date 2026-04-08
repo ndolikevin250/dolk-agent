@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
+const SERPAPI_KEY = process.env.SERPAPI_KEY;
 const JSEARCH_KEY = process.env.JSEARCH_API_KEY;
 const ADZUNA_ID = process.env.ADZUNA_APP_ID;
 const ADZUNA_KEY = process.env.ADZUNA_APP_KEY;
@@ -29,55 +30,101 @@ function getAdzunaCountry(location) {
   return null;
 }
 
+// ─── PRIMARY SOURCE: SerpApi (Google Jobs) ───────────────────────────
+async function fetchSerpApi(query, location) {
+  if (!SERPAPI_KEY) return [];
+  try {
+    const params = new URLSearchParams({
+      engine: 'google_jobs',
+      q: query,
+      api_key: SERPAPI_KEY,
+      hl: 'en',
+      gl: 'rw', // Rwanda
+      num: '10'
+    });
+    if (location) params.append('location', location);
+
+    const r = await fetch(`https://serpapi.com/search.json?${params}`);
+    if (!r.ok) return [];
+
+    const data = await r.json();
+    const jobsResults = data.jobs_results || [];
+
+    return jobsResults.map(j => ({
+      title: j.title || 'Untitled',
+      company: j.company_name || 'Unknown',
+      location: j.location || 'Not specified',
+      type: j.job_type || 'Full-time',
+      is_remote: /remote/i.test(j.detected_extensions?.work_from_home || ''),
+      url: (j.apply_options?.[0]?.link || j.share_link) || null,
+      description: j.description || '',
+      highlights: j.job_highlights || [],
+      posted: j.detected_extensions?.posted_at || null,
+      salary_min: j.salary_min || null,
+      salary_max: j.salary_max || null,
+      salary_currency: j.currency || null,
+      salary_period: j.salary_min ? 'year' : null,
+      employer_logo: j.thumbnail || null,
+      source: 'serpapi',
+      hiring_email: null, tags: [], match: 0, why: ''
+    }));
+  } catch (err) { console.error('SerpApi error:', err.message); return []; }
+}
+
 async function fetchJSearch(query, location, remoteOnly, datePosted) {
   if (!JSEARCH_KEY) return [];
   try {
-    const searchQuery = location ? `${query} in ${location}` : query;
-    const queries = [searchQuery];
-    if (location) {
-      const parts = location.split(',').map(s => s.trim());
-      if (parts.length > 1) queries.push(`${query} in ${parts[parts.length - 1]}`);
-    }
+    // Don't include location in query string — JSearch returns 0 results for custom formats like "Kigali-Rwanda"
+    // Instead, query just the job type and filter results client-side by location
+    const params = new URLSearchParams({ query, page: '1', num_pages: '1', date_posted: datePosted });
+    if (remoteOnly) params.append('remote_jobs_only', 'true');
 
     const seen = new Set();
     const results = [];
 
-    for (const q of queries) {
-      const params = new URLSearchParams({ query: q, page: '1', num_pages: '1', date_posted: datePosted });
-      if (remoteOnly) params.append('remote_jobs_only', 'true');
-      try {
-        const r = await fetch(`https://jsearch.p.rapidapi.com/search?${params}`, {
-          headers: { 'X-RapidAPI-Key': JSEARCH_KEY, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' }
-        });
-        if (!r.ok) continue;
-        const data = await r.json();
-        for (const j of (data.data || [])) {
-          const key = (j.job_title + '|' + j.employer_name).toLowerCase();
-          if (!seen.has(key)) { seen.add(key); results.push(j); }
-        }
-      } catch (e) { console.error('JSearch query error:', e.message); }
-    }
+    try {
+      const r = await fetch(`https://jsearch.p.rapidapi.com/search?${params}`, {
+        headers: { 'X-RapidAPI-Key': JSEARCH_KEY, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' }
+      });
+      if (!r.ok) return [];
+      const data = await r.json();
+      for (const j of (data.data || [])) {
+        const key = (j.job_title + '|' + j.employer_name).toLowerCase();
+        if (!seen.has(key)) { seen.add(key); results.push(j); }
+      }
+    } catch (e) { console.error('JSearch query error:', e.message); return []; }
 
-    return results.map(j => ({
-      title: j.job_title || 'Untitled',
-      company: j.employer_name || 'Unknown',
-      location: j.job_city && j.job_state
-        ? `${j.job_city}, ${j.job_state}${j.job_country ? ', ' + j.job_country : ''}`
-        : j.job_country || 'Not specified',
-      type: j.job_employment_type || 'Full-time',
-      is_remote: j.job_is_remote || false,
-      url: j.job_apply_link || j.job_google_link || null,
-      description: j.job_description || '',
-      highlights: j.job_highlights?.Qualifications || [],
-      posted: j.job_posted_at_datetime_utc || null,
-      salary_min: j.job_min_salary || null,
-      salary_max: j.job_max_salary || null,
-      salary_currency: j.job_salary_currency || null,
-      salary_period: j.job_salary_period || null,
-      employer_logo: j.employer_logo || null,
-      source: 'jsearch',
-      hiring_email: null, tags: [], match: 0, why: ''
-    }));
+    return results
+      .map(j => ({
+        title: j.job_title || 'Untitled',
+        company: j.employer_name || 'Unknown',
+        location: j.job_city && j.job_state
+          ? `${j.job_city}, ${j.job_state}${j.job_country ? ', ' + j.job_country : ''}`
+          : j.job_country || 'Not specified',
+        type: j.job_employment_type || 'Full-time',
+        is_remote: j.job_is_remote || false,
+        url: j.job_apply_link || j.job_google_link || null,
+        description: j.job_description || '',
+        highlights: j.job_highlights?.Qualifications || [],
+        posted: j.job_posted_at_datetime_utc || null,
+        salary_min: j.job_min_salary || null,
+        salary_max: j.job_max_salary || null,
+        salary_currency: j.job_salary_currency || null,
+        salary_period: j.job_salary_period || null,
+        employer_logo: j.employer_logo || null,
+        source: 'jsearch',
+        hiring_email: null, tags: [], match: 0, why: ''
+      }))
+      .filter(job => {
+        // Filter by location if provided, with tolerance for location format variations
+        if (!location) return true;
+        const jobLoc = (job.location || '').toLowerCase();
+        const searchLoc = location.toLowerCase().replace('-', ' ');
+        // Match: "Kigali, RW" contains "kigali" OR "kigali rwanda" contains location keyword
+        return jobLoc.includes(searchLoc.split(' ')[0]) ||
+               jobLoc.includes(searchLoc) ||
+               searchLoc.includes(jobLoc.split(',')[0]);
+      });
   } catch (err) { console.error('JSearch error:', err.message); return []; }
 }
 
@@ -151,22 +198,33 @@ router.get('/', async (req, res) => {
     if (!query) return res.status(400).json({ error: 'query parameter required' });
 
     const remoteOnly = remote_only === 'true';
+    const startTime = Date.now();
 
-    const [jsearchJobs, adzunaJobs, remotiveJobs] = await Promise.all([
-      fetchJSearch(query, location, remoteOnly, date_posted),
-      fetchAdzuna(query, location),
-      fetchRemotive(query)
-    ]);
+    // PRIMARY → SerpApi (Google Jobs), FALLBACK → JSearch/Adzuna/Remotive
+    const serpApiJobs = await fetchSerpApi(query, location);
+    let jsearchJobs = [], adzunaJobs = [], remotiveJobs = [];
+
+    // Only call fallback APIs if SerpApi returned few results
+    if (serpApiJobs.length < 5) {
+      [jsearchJobs, adzunaJobs, remotiveJobs] = await Promise.all([
+        fetchJSearch(query, location, remoteOnly, date_posted),
+        fetchAdzuna(query, location),
+        fetchRemotive(query)
+      ]);
+    }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`[JOBS API] ${elapsed}ms: SerpApi=${serpApiJobs.length}${serpApiJobs.length < 5 ? ' (called fallbacks)' : ' (no fallbacks needed)'}, JSearch=${jsearchJobs.length}, Adzuna=${adzunaJobs.length}, Remotive=${remotiveJobs.length}`);
 
     const seen = new Set();
     const allJobs = [];
-    for (const job of [...jsearchJobs, ...adzunaJobs, ...remotiveJobs]) {
+    // SerpApi first, then others
+    for (const job of [...serpApiJobs, ...jsearchJobs, ...adzunaJobs, ...remotiveJobs]) {
       const key = (job.title + '|' + job.company).toLowerCase();
       if (!seen.has(key)) { seen.add(key); allJobs.push(job); }
     }
 
-    console.log(`Jobs API: "${query}" in "${location || 'any'}" → JSearch: ${jsearchJobs.length}, Adzuna: ${adzunaJobs.length}, Remotive: ${remotiveJobs.length}, total: ${allJobs.length}`);
-    res.json({ jobs: allJobs, total: allJobs.length });
+    res.json({ jobs: allJobs, total: allJobs.length, source_breakdown: { serpapi: serpApiJobs.length, jsearch: jsearchJobs.length, adzuna: adzunaJobs.length, remotive: remotiveJobs.length } });
   } catch (err) {
     console.error('Jobs API error:', err);
     res.status(500).json({ error: 'Failed to fetch jobs' });

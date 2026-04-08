@@ -20,10 +20,8 @@ mongoose.connect(process.env.MONGODB_URI)
 
 // ─── ROUTES ─────────────────────────────────────────────
 app.use('/api/chat', require('./routes/chat'));
-app.use('/api/session', require('./routes/session'));
 app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api', require('./routes/email'));
-app.use('/api/applications', require('./routes/applications'));
 app.use('/api', require('./routes/cv'));
 
 // ─── START ──────────────────────────────────────────────
