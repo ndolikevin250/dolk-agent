@@ -14,15 +14,49 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── MONGODB ────────────────────────────────────────────
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB error:', err.message));
+const mongooseOptions = {
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+  retryWrites: true,
+  w: 'majority',
+  family: 4
+};
+
+mongoose.connect(process.env.MONGODB_URI, mongooseOptions)
+  .then(() => console.log('✓ MongoDB connected successfully'))
+  .catch(err => console.error('✗ MongoDB connection error:', err.message));
+
+// Monitor connection events
+mongoose.connection.on('connected', () => {
+  console.log('✓ Mongoose default connection open to', mongoose.connection.host);
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('✗ Mongoose connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.warn('⚠ Mongoose connection disconnected');
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  mongoose.connection.close();
+  console.log('Mongoose connection closed due to application termination');
+  process.exit(0);
+});
 
 // ─── ROUTES ─────────────────────────────────────────────
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api', require('./routes/email'));
 app.use('/api', require('./routes/cv'));
+
+// ─── ADMIN PANEL (LOCAL ONLY) ─────────────────────────────
+if (process.env.ADMIN_SECRET) {
+  app.use('/api/admin', require('./admin/routes'));
+  app.use('/admin', express.static(path.join(__dirname, 'admin')));
+}
 
 // ─── START ──────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
