@@ -139,6 +139,24 @@ async function callAPI(messages, temperature = 0.7, max_tokens = 1024) {
   const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
   try {
     await refreshToken();
+    
+    // Ensure we have an auth token
+    if (!authToken || !currentUser) {
+      console.error('[callAPI] Missing auth - currentUser:', currentUser ? currentUser.uid : 'null', 'authToken:', authToken ? 'present' : 'null');
+      // Try to get a fresh token if currentUser exists
+      if (currentUser) {
+        try {
+          authToken = await currentUser.getIdToken(true);
+          console.log('[callAPI] Successfully refreshed token');
+        } catch (err) {
+          console.error('[callAPI] Token refresh failed:', err.message);
+          throw new Error('Authentication failed. Please sign in again.');
+        }
+      } else {
+        throw new Error('Not authenticated. Please sign in.');
+      }
+    }
+    
     const r = await fetch(API_URL, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
