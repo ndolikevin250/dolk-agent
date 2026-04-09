@@ -3,6 +3,7 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const { fetch } = require('undici');
 const { requireAuth } = require('../middleware/auth');
+const Session = require('../models/Session');
 
 const chatLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -21,32 +22,57 @@ router.post('/', chatLimiter, requireAuth, async (req, res) => {
       return res.status(503).json({ error: 'AI chat is not configured. Set GROQ_API_KEY in your .env file.' });
     }
 
-    const { messages, temperature = 0.7, max_tokens = 1024 } = req.body;
-    if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: 'messages array required' });
-    }
-    if (messages.length === 0 || messages.length > 50) {
-      return res.status(400).json({ error: 'messages must have 1-50 entries' });
+    const { message, sessionId, history = [] } = req.body;
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'message string required' });
     }
 
-    // Validate each message has a role and content string
-    const validRoles = ['system', 'user', 'assistant'];
+    // 1. Fetch Session from MongoDB
+    let session = null;
+    if (sessionId) {
+      try {
+        session = await Session.findById(sessionId);
+      } catch (err) {
+        console.warn('Session fetch error:', err.message);
+      }
+    }
+
+    // 2. Safely construct the System Prompt
+    let systemPrompt = "You are Dolk Agent, an expert AI job search assistant for Rwanda and East Africa.";
+
+    if (session && session.cvText) {
+      // CRITICAL: Clean the text of null bytes and weird characters
+      let cleanCvText = session.cvText.replace(/\0/g, '').trim();
+
+      // CRITICAL: Truncate to ~10,000 characters to prevent Groq API crashes
+      if (cleanCvText.length > 10000) {
+        cleanCvText = cleanCvText.substring(0, 10000) + "... [CV Truncated]";
+      }
+
+      systemPrompt += `\n\nHere is the user's uploaded CV context to help them:\n${cleanCvText}`;
+    }
+
+    // 3. Prepare the exact payload Groq expects
+    const messages = [
+      { role: "system", content: systemPrompt },
+      ...history,
+      { role: "user", content: message }
+    ];
+
+    // Validate messages
     for (const msg of messages) {
       if (!msg || typeof msg !== 'object') {
         return res.status(400).json({ error: 'Each message must be an object' });
       }
-      if (!validRoles.includes(msg.role)) {
-        return res.status(400).json({ error: 'Each message must have a valid role (system, user, assistant)' });
+      if (!['system', 'user', 'assistant'].includes(msg.role)) {
+        return res.status(400).json({ error: 'Invalid message role' });
       }
       if (typeof msg.content !== 'string' || msg.content.length > 15000) {
-        return res.status(400).json({ error: 'Each message content must be a string (max 15000 chars)' });
+        return res.status(400).json({ error: 'Message content must be string (max 15000 chars)' });
       }
     }
 
-    // Clamp temperature and max_tokens to safe ranges
-    const safeTemp = Math.min(Math.max(Number(temperature) || 0.7, 0), 2);
-    const safeMaxTokens = Math.min(Math.max(Math.floor(Number(max_tokens) || 1024), 1), 4096);
-
+    // 4. Call Groq API
     const r = await fetch(GROQ_URL, {
       method: 'POST',
       headers: {
@@ -55,26 +81,26 @@ router.post('/', chatLimiter, requireAuth, async (req, res) => {
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-        temperature: safeTemp,
-        max_tokens: safeMaxTokens
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 1024
       })
     });
 
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
       const msg = err.error?.message || 'AI service temporarily unavailable';
-      console.error('Groq API error:', r.status, msg);
-      // Don't forward Groq's status codes — normalize to 502 (bad gateway) so frontend can distinguish
+      console.error("Chat Endpoint Error - Groq API Error Detail:", r.status, msg);
       return res.status(502).json({ error: msg });
     }
 
     const data = await r.json();
     const text = data.choices?.[0]?.message?.content || '';
-    res.json({ text: text.trim() });
-  } catch (err) {
-    console.error('Groq proxy error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.json({ reply: text.trim() });
+
+  } catch (error) {
+    console.error("Chat Endpoint Error:", error);
+    res.status(500).json({ error: "Agent is currently having trouble processing that request." });
   }
 });
 

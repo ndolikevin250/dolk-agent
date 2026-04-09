@@ -273,15 +273,6 @@ router.get('/google', async (req, res) => {
     // Create Firebase custom token
     const customToken = await admin.auth().createCustomToken(googleId);
 
-    // Store in OAuthState for frontend to retrieve
-    await OAuthState.updateOne(
-      { state },
-      { 
-        token: customToken,
-        dbUser: { name: user.name, email: user.email, role: user.role, plan: user.plan }
-      }
-    );
-
     // Return HTML that postMessages to opener
     res.send(`
       <!DOCTYPE html>
@@ -291,8 +282,7 @@ router.get('/google', async (req, res) => {
         <script>
           (function() {
             const token = '${customToken}';
-            const dbUser = ${JSON.stringify({ name: user.name, email: user.email, role: user.role, plan: user.plan })};
-            window.opener.postMessage({ firebaseCustomToken: token, dbUser }, '*');
+            window.opener.postMessage({ token: token }, '${process.env.CORS_ORIGIN || 'http://localhost:3000'}');
             window.close();
           })();
         </script>

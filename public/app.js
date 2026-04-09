@@ -2230,97 +2230,49 @@ async function authGoogle() {
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" style="vertical-align:middle;margin-right:6px;"><path d="M15.68 8.18c0-.57-.05-1.12-.15-1.64H8v3.1h4.3a3.68 3.68 0 0 1-1.6 2.42v2h2.58c1.51-1.4 2.4-3.45 2.4-5.88Z" fill="#4285F4"/><path d="M8 16c2.16 0 3.97-.72 5.3-1.94l-2.59-2a4.8 4.8 0 0 1-7.18-2.52H.93v2.06A8 8 0 0 0 8 16Z" fill="#34A853"/><path d="M3.53 9.54a4.8 4.8 0 0 1 0-3.08V4.4H.93a8 8 0 0 0 0 7.2l2.6-2.06Z" fill="#FBBC05"/><path d="M8 3.18a4.33 4.33 0 0 1 3.07 1.2l2.3-2.3A7.73 7.73 0 0 0 8 0 8 8 0 0 0 .93 4.4l2.6 2.06A4.77 4.77 0 0 1 8 3.18Z" fill="#EA4335"/></svg> Continue with Google';
   }
 
-  // Step 1: Get auth URL + state from server
-  let authUrl, authState;
   try {
-    const initRes = await fetch('/auth/google/init');
-    const initData = await initRes.json();
-    authUrl = initData.url;
-    authState = initData.state;
-    console.log('[GoogleAuth] Got state:', authState?.substring(0, 8) + '...');
-  } catch (err) {
-    showAuthError('Failed to start Google sign-in. Please try again.');
+    // 1. OPEN POPUP IMMEDIATELY (Bypasses popup blocker)
+    const authWindow = window.open('', '_blank', 'width=500,height=600');
+    
+    if (!authWindow) {
+      throw new Error('Popup blocked. Please allow popups for this site.');
+    }
+
+    // 2. Fetch the Auth URL from your backend
+    const response = await fetch('/auth/google/init');
+    const data = await response.json();
+
+    if (data.url) {
+      // 3. Redirect the popup to Google OAuth
+      authWindow.location.href = data.url;
+    } else {
+      throw new Error('No URL returned from backend');
+    }
+
+    // 4. Listen for the Firebase token coming back from the popup
+    window.addEventListener('message', async (event) => {
+      // Only accept messages from your own domain (localhost or render URL)
+      if (event.origin !== window.location.origin) return;
+
+      if (event.data && event.data.token) {
+        // Sign into Firebase on the frontend using the custom token
+        try {
+          await firebaseAuth.signInWithCustomToken(event.data.token);
+          console.log("Successfully signed in via Google!");
+          // Update UI - user is now logged in
+          resetBtn();
+        } catch (err) {
+          showAuthError('Failed to sign in: ' + err.message);
+          resetBtn();
+        }
+      }
+    }, { once: true });
+
+  } catch (error) {
+    console.error('Failed to start Google sign-in:', error);
+    showAuthError('Authentication failed. Please check your connection.');
     resetBtn();
-    return;
   }
-
-  // Step 2: Open popup to OUR server (same-origin) which redirects to Google
-  // Opening directly to Google makes popup.closed unreliable (cross-origin)
-  const w = 500, h = 600;
-  const left = (screen.width - w) / 2, top = (screen.height - h) / 2;
-  const popup = window.open('/auth/google?state=' + encodeURIComponent(authState), 'google-auth', 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top);
-
-  let done = false;
-  let serverPollInterval;
-
-  function cleanup() {
-    window.removeEventListener('message', onMsg);
-    if (serverPollInterval) clearInterval(serverPollInterval);
-  }
-
-  function handleAuthData(data, source) {
-    if (done) return;
-    done = true;
-    cleanup();
-    console.log('[GoogleAuth] Got auth data via ' + source);
-    if (data.dbUser) window._googleDbUser = data.dbUser;
-    const token = data.firebaseCustomToken;
-    if (!token) {
-      showAuthError('Google sign-in failed: no token received.');
-      resetBtn();
-      return;
-    }
-    (async function trySignIn(retries) {
-      try {
-        console.log('[GoogleAuth] signInWithCustomToken...');
-        await firebaseAuth.signInWithCustomToken(token);
-        console.log('[GoogleAuth] SUCCESS');
-      } catch (err) {
-        console.error('[GoogleAuth] FAILED:', err.code, err.message);
-        if (retries > 0) { await sleep(1500); return trySignIn(retries - 1); }
-        showAuthError('Google sign-in failed: ' + (err.message || err.code));
-        resetBtn();
-      }
-    })(2);
-  }
-
-  // Fast path: postMessage from popup (works in normal mode)
-  function onMsg(e) {
-    if (e.origin !== window.location.origin) return;
-    if (e.data.googleAuthError) {
-      done = true; cleanup();
-      showAuthError('Google sign-in failed: ' + e.data.googleAuthError);
-      resetBtn();
-      return;
-    }
-    if (e.data.firebaseCustomToken) handleAuthData(e.data, 'postMessage');
-  }
-  window.addEventListener('message', onMsg);
-
-  // Poll the SERVER for the auth result using the state token
-  // This is the only reliable method — works in all browsers, incognito, etc.
-  // No popup.closed detection (unreliable with cross-origin redirects)
-  console.log('[GoogleAuth] Polling server for auth result...');
-  serverPollInterval = setInterval(async () => {
-    if (done) return;
-    try {
-      const r = await fetch('/auth/google/pending/' + authState);
-      const data = await r.json();
-      if (data.ready) {
-        console.log('[GoogleAuth] Server has token!');
-        handleAuthData(data, 'server-poll');
-      }
-    } catch {}
-  }, 1000);
-
-  // Timeout after 2 minutes
-  setTimeout(() => {
-    if (!done) {
-      cleanup();
-      resetBtn();
-      showAuthError('Google sign-in timed out. Please try again.');
-    }
-  }, 120000);
 }
 
 function logOut() {
