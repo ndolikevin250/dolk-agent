@@ -75,8 +75,13 @@ app.use('/api', require('./routes/cv'));
 
 // ─── ADMIN PANEL (LOCAL ONLY) ─────────────────────────────
 if (process.env.ADMIN_SECRET) {
-  app.use('/api/admin', require('./admin/routes'));
-  app.use('/admin', express.static(path.join(__dirname, 'admin')));
+  try {
+    app.use('/api/admin', require('./admin/routes'));
+    app.use('/admin', express.static(path.join(__dirname, 'admin')));
+    console.log('✓ Admin panel loaded');
+  } catch (err) {
+    console.warn('⚠ Admin panel not found - skipped (expected in production)');
+  }
 }
 
 // ─── START ──────────────────────────────────────────────
