@@ -44,24 +44,24 @@ Set these values in Render dashboard (Settings → Environment):
 
 **REQUIRED FOR GOOGLE OAUTH:**
 ```
-GOOGLE_CLIENT_ID=548907560295-mr64krunn5omm0ejnepk65059vpmo1sp.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=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
+GOOGLE_CLIENT_ID=(from Google Cloud Console)
+GOOGLE_CLIENT_SECRET=(from Google Cloud Console)
 CORS_ORIGIN=https://dolk-agent.onrender.com
 ```
 
 **REQUIRED FOR MONGODB:**
 ```
-MONGODB_URI=mongodb://Dolk_agent:Fg3NZHHBESPyaS3H@cluster0-shard-00-00.btqxk.mongodb.net:27017,cluster0-shard-00-01.btqxk.mongodb.net:27017,cluster0-shard-00-02.btqxk.mongodb.net:27017/dolk_agent?ssl=true&replicaSet=atlas-12ttci-shard-0&authSource=admin&retryWrites=true&w=majority&appName=Cluster0
+MONGODB_URI=(from MongoDB Atlas)
 ```
 
 **OTHER CRITICAL VARS:**
 ```
 NODE_ENV=production
-FIREBASE_API_KEY=AIzaSyDgY63mYISiimTd10dsl48xnEmSPvrup2U
-FIREBASE_AUTH_DOMAIN=dolk-agent-9f044.firebaseapp.com
-FIREBASE_PROJECT_ID=dolk-agent-9f044
-FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}  (copy from .env)
-GROQ_API_KEY=(your key)
+FIREBASE_API_KEY=(from Firebase Console)
+FIREBASE_AUTH_DOMAIN=(from Firebase Console)
+FIREBASE_PROJECT_ID=(from Firebase Console)
+FIREBASE_SERVICE_ACCOUNT=(from Firebase Console - service account JSON)
+GROQ_API_KEY=(from Groq Console)
 ```
 
 **OPTIONAL BUT RECOMMENDED:**
