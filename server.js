@@ -84,8 +84,12 @@ app.get('/api/config', (req, res) => {
 });
 
 // ─── ROUTES ─────────────────────────────────────────────
+app.use('/api/auth', require('./routes/auth'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/jobs', require('./routes/jobs'));
+app.use('/api/employer', require('./routes/employer'));
+app.use('/api/payment', require('./routes/payment'));
+app.use('/api/discovery', require('./routes/discovery'));
 app.use('/api', require('./routes/email'));
 app.use('/api', require('./routes/cv'));
 
