@@ -46,6 +46,16 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
+// ─── HEALTH CHECK (Render monitoring) ────────────────────
+app.get('/api/health', (req, res) => {
+  const mongoState = mongoose.connection.readyState;
+  res.json({
+    status: mongoState === 1 ? 'healthy' : 'degraded',
+    mongodb: mongoState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // ─── ROUTES ─────────────────────────────────────────────
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/jobs', require('./routes/jobs'));
