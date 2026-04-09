@@ -104,19 +104,26 @@ app.use('/api/payment', require('./routes/payment'));
 app.use('/api/discovery', require('./routes/discovery'));
 app.use('/api/session', require('./routes/session'));
 app.use('/api/applications', require('./routes/applications'));
-app.use('/api', require('./routes/email'));
-app.use('/api', require('./routes/cv'));
 
-// ─── ADMIN PANEL (LOCAL ONLY) ─────────────────────────────
+// ─── ADMIN PANEL (LOCAL ONLY) - MUST BE BEFORE '/api' CATCH-ALL ─────────────────────────────
 if (process.env.ADMIN_SECRET) {
   try {
-    app.use('/api/admin', require('./admin/routes'));
+    const adminRoutes = require('./admin/routes');
+    console.log('Admin routes loaded:', typeof adminRoutes);
+    app.use('/api/admin', adminRoutes);
     app.use('/admin', express.static(path.join(__dirname, 'admin')));
     console.log('✓ Admin panel loaded');
   } catch (err) {
+    console.error('⚠ Admin panel load error:', err);
     console.warn('⚠ Admin panel not found - skipped (expected in production)');
   }
+} else {
+  console.log('⚠ ADMIN_SECRET not set - admin panel disabled');
 }
+
+// ─── GENERIC API ROUTES (email, cv) - MOUNTED LAST ─────────────────────────────
+app.use('/api', require('./routes/email'));
+app.use('/api', require('./routes/cv'));
 
 // ─── START ──────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
