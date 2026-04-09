@@ -26,31 +26,43 @@ const mongooseOptions = {
   heartbeatFrequencyMS: 30000,
 };
 
+let mongoConnected = false;
+
 mongoose.connect(process.env.MONGODB_URI, mongooseOptions)
-  .then(() => console.log('✓ MongoDB connected successfully'))
-  .catch(err => console.error('✗ MongoDB connection error:', err.message));
+  .then(() => {
+    mongoConnected = true;
+    console.log('✓ MongoDB connected successfully');
+  })
+  .catch(err => {
+    mongoConnected = false;
+    console.error('✗ MongoDB connection error:', err.message);
+  });
 
 // Monitor connection events
 mongoose.connection.on('connected', () => {
-  console.log('✓ Mongoose default connection open to', mongoose.connection.host);
+  mongoConnected = true;
+  console.log('✓ Mongoose connected to', mongoose.connection.host);
 });
 
 mongoose.connection.on('error', (err) => {
+  mongoConnected = false;
   console.error('✗ Mongoose connection error:', err.message);
 });
 
 mongoose.connection.on('disconnected', () => {
-  console.warn('⚠ Mongoose connection disconnected - will auto-reconnect');
+  mongoConnected = false;
+  console.warn('⚠ Mongoose disconnected - attempting to reconnect...');
 });
 
 mongoose.connection.on('reconnected', () => {
-  console.log('✓ Mongoose reconnected to', mongoose.connection.host);
+  mongoConnected = true;
+  console.log('✓ Mongoose successfully reconnected');
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
   mongoose.connection.close();
-  console.log('Mongoose connection closed due to application termination');
+  console.log('Mongoose connection closed');
   process.exit(0);
 });
 
@@ -58,11 +70,11 @@ process.on('SIGINT', () => {
 app.get('/api/health', (req, res) => {
   const mongoState = mongoose.connection.readyState;
   const stateNames = ['disconnected', 'connected', 'connecting', 'disconnecting'];
-  console.log(`[Health Check] MongoDB state: ${stateNames[mongoState]} (${mongoState})`);
   res.json({
-    status: mongoState === 1 ? 'healthy' : 'degraded',
-    mongodb: stateNames[mongoState],
+    status: (mongoConnected && mongoState === 1) ? 'healthy' : 'degraded',
+    mongodb: mongoConnected ? 'connected' : 'disconnected',
     readyState: mongoState,
+    uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString()
   });
 });
