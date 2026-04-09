@@ -189,7 +189,7 @@ router.get('/google/init', async (req, res) => {
     // Build Google OAuth URL
     const params = new URLSearchParams({
       client_id: process.env.GOOGLE_CLIENT_ID,
-      redirect_uri: `${process.env.CORS_ORIGIN || 'http://localhost:3000'}/auth/google`,
+      redirect_uri: `${process.env.CORS_ORIGIN || 'http://localhost:3000'}/api/auth/google`,
       response_type: 'code',
       scope: 'openid email profile',
       state: state,
@@ -230,7 +230,7 @@ router.get('/google', async (req, res) => {
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: `${process.env.CORS_ORIGIN || 'http://localhost:3000'}/auth/google`
+        redirect_uri: `${process.env.CORS_ORIGIN || 'http://localhost:3000'}/api/auth/google`
       })
     });
 
