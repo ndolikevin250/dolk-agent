@@ -236,8 +236,12 @@ router.get('/google', async (req, res) => {
 
     if (!tokenRes.ok) {
       const err = await tokenRes.json();
-      console.error('Google token exchange failed:', err);
-      return res.status(400).json({ error: 'Token exchange failed' });
+      console.error('Google token exchange failed:', {status: tokenRes.status, error: err});
+      console.error('Attempted with:', {
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        redirect_uri: `${process.env.CORS_ORIGIN || 'http://localhost:3000'}/api/auth/google`
+      });
+      return res.status(400).json({ error: 'Token exchange failed', details: err });
     }
 
     const tokens = await tokenRes.json();
@@ -267,6 +271,27 @@ router.get('/google', async (req, res) => {
       if (!user.firebaseUid) {
         user.firebaseUid = googleId;
         await user.save();
+      }
+    }
+
+    // Create or update Firebase user with email
+    try {
+      await admin.auth().getUser(googleId);
+      // User exists, update email if needed
+      await admin.auth().updateUser(googleId, {
+        email: email,
+        displayName: name || email.split('@')[0]
+      });
+    } catch (err) {
+      if (err.code === 'auth/user-not-found') {
+        // Create new Firebase user
+        await admin.auth().createUser({
+          uid: googleId,
+          email: email,
+          displayName: name || email.split('@')[0]
+        });
+      } else {
+        console.error('Firebase user error:', err);
       }
     }
 
@@ -301,6 +326,57 @@ router.get('/google', async (req, res) => {
       </body>
       </html>
     `);
+  }
+});
+
+// Send verification email (server-side)
+router.post('/send-verification-email', requireAuth, async (req, res) => {
+  try {
+    const uid = req.firebaseUid;
+    const email = req.user.email;
+
+    if (!email) {
+      return res.status(400).json({ error: 'User email not found' });
+    }
+
+    // Use Firebase Admin SDK to generate verification link
+    const actionCodeSettings = {
+      url: `${process.env.CORS_ORIGIN || 'http://localhost:3000'}/?emailVerified=true`,
+      handleCodeInApp: true
+    };
+
+    const link = await admin.auth().generateEmailVerificationLink(email, actionCodeSettings);
+    console.log('Verification link generated for', email);
+
+    // Send email using your email service (Nodemailer)
+    const emailService = require('../routes/email'); // or wherever you have nodemailer configured
+    const transporter = require('nodemailer').createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT),
+      secure: true,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    });
+
+    await transporter.sendMail({
+      to: email,
+      from: process.env.SMTP_FROM_NAME || 'Dolk Agent <noreply@dolk-agent.com>',
+      subject: 'Verify your email',
+      html: `
+        <h2>Welcome to Dolk Agent!</h2>
+        <p>Click the link below to verify your email address:</p>
+        <p><a href="${link}">Verify Email</a></p>
+        <p>Or copy this link: ${link}</p>
+        <p>This link expires in 24 hours.</p>
+      `
+    });
+
+    res.json({ ok: true, message: 'Verification email sent' });
+  } catch (err) {
+    console.error('Send verification email error:', err);
+    res.status(500).json({ error: 'Failed to send verification email: ' + err.message });
   }
 });
 

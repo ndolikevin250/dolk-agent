@@ -2174,24 +2174,25 @@ async function authSubmit() {
 async function sendVerificationEmail() {
   if (!currentUser) return;
   try {
-    // Reload user first to get fresh token (fixes stale token 400 errors)
-    await currentUser.reload();
-    if (currentUser.emailVerified) {
-      showToast('Your email is already verified! Reload the page.', 'success');
-      return;
+    // Call server endpoint to send verification email
+    const response = await fetch('/api/auth/send-verification-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('firebaseToken')}`
+      }
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Failed to send email');
     }
-    await currentUser.sendEmailVerification();
+
+    const result = await response.json();
     showToast('Verification email sent! Check your inbox and spam/junk folder.', 'success');
   } catch (err) {
-    console.error('Verification email error:', err.code, err.message);
-    if (err.code === 'auth/too-many-requests') {
-      showToast('Too many attempts. Please try again later.', 'error');
-    } else if (err.message?.includes('400') || err.code === 'auth/invalid-continue-uri' || err.code === 'auth/unauthorized-continue-uri') {
-      // Firebase needs localhost in authorized domains — send without continueUrl
-      showToast('Email verification needs Firebase config. Go to Firebase Console → Authentication → Settings → Authorized Domains and add "localhost".', 'error');
-    } else {
-      showToast('Failed to send verification email: ' + (err.code || err.message), 'error');
-    }
+    console.error('Verification email error:', err.message);
+    showToast('Failed to send verification email: ' + err.message, 'error');
   }
 }
 
@@ -2257,8 +2258,13 @@ async function authGoogle() {
       if (event.data && event.data.token) {
         // Sign into Firebase on the frontend using the custom token
         try {
-          await firebaseAuth.signInWithCustomToken(event.data.token);
+          const userCredential = await firebaseAuth.signInWithCustomToken(event.data.token);
           console.log("Successfully signed in via Google!");
+          
+          // Get the actual ID token for API calls
+          const idToken = await userCredential.user.getIdToken();
+          localStorage.setItem('firebaseToken', idToken);
+          
           // Update UI - user is now logged in
           resetBtn();
         } catch (err) {
