@@ -295,8 +295,8 @@ router.get('/google', async (req, res) => {
       }
     }
 
-    // Create Firebase custom token
-    const customToken = await admin.auth().createCustomToken(googleId);
+    // Create Firebase custom token with email claim
+    const customToken = await admin.auth().createCustomToken(googleId, { email });
 
     // Return HTML that postMessages to opener
     res.send(`
@@ -332,9 +332,11 @@ router.get('/google', async (req, res) => {
 // Send verification email (server-side)
 router.post('/send-verification-email', requireAuth, async (req, res) => {
   try {
-    const email = req.user.email;
+    // Try to get email from DB user first, then from token claims
+    const email = req.user?.email || req.firebaseEmail;
 
     if (!email) {
+      console.error('Email not found - req.user.email:', req.user?.email, 'req.firebaseEmail:', req.firebaseEmail);
       return res.status(400).json({ error: 'User email not found' });
     }
 

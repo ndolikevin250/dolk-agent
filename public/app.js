@@ -157,10 +157,18 @@ async function callAPI(messages, temperature = 0.7, max_tokens = 1024) {
       }
     }
     
+    // Extract the user's message (last item) and previous history
+    const userMessage = messages[messages.length - 1]?.content || '';
+    const history = messages.slice(0, -1); // Everything except the last message
+    
     const r = await fetch(API_URL, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ messages, temperature, max_tokens }),
+      body: JSON.stringify({ 
+        message: userMessage,
+        sessionId: S.sessId || '',
+        history: history
+      }),
       signal: controller.signal
     });
     if (!r.ok) {
@@ -168,7 +176,7 @@ async function callAPI(messages, temperature = 0.7, max_tokens = 1024) {
       throw new Error(err.error || 'AI service error (status ' + r.status + ')');
     }
     const d = await r.json();
-    return (d.text || '').trim();
+    return (d.reply || '').trim();
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('AI service timed out. Please try again.');
     throw e;
