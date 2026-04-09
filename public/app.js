@@ -2239,7 +2239,7 @@ async function authGoogle() {
     }
 
     // 2. Fetch the Auth URL from your backend
-    const response = await fetch('/auth/google/init');
+    const response = await fetch('/api/auth/google/init');
     const data = await response.json();
 
     if (data.url) {
