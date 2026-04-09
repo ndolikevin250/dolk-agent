@@ -90,6 +90,7 @@ app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api/employer', require('./routes/employer'));
 app.use('/api/payment', require('./routes/payment'));
 app.use('/api/discovery', require('./routes/discovery'));
+app.use('/api/session', require('./routes/session'));
 app.use('/api', require('./routes/email'));
 app.use('/api', require('./routes/cv'));
 
