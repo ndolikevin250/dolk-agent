@@ -332,14 +332,18 @@ router.get('/google', async (req, res) => {
 // Send verification email (server-side)
 router.post('/send-verification-email', requireAuth, async (req, res) => {
   try {
-    const uid = req.firebaseUid;
     const email = req.user.email;
 
     if (!email) {
       return res.status(400).json({ error: 'User email not found' });
     }
 
-    // Use Firebase Admin SDK to generate verification link
+    // Check SMTP is configured
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      return res.status(500).json({ error: 'Email service not configured' });
+    }
+
+    // Generate verification link using Firebase Admin SDK
     const actionCodeSettings = {
       url: `${process.env.CORS_ORIGIN || 'http://localhost:3000'}/?emailVerified=true`,
       handleCodeInApp: true
@@ -348,31 +352,34 @@ router.post('/send-verification-email', requireAuth, async (req, res) => {
     const link = await admin.auth().generateEmailVerificationLink(email, actionCodeSettings);
     console.log('Verification link generated for', email);
 
-    // Send email using your email service (Nodemailer)
-    const emailService = require('../routes/email'); // or wherever you have nodemailer configured
-    const transporter = require('nodemailer').createTransport({
+    // Create Nodemailer transporter
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT),
-      secure: true,
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: parseInt(process.env.SMTP_PORT) === 465,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
       }
     });
 
+    // Send verification email
     await transporter.sendMail({
       to: email,
-      from: process.env.SMTP_FROM_NAME || 'Dolk Agent <noreply@dolk-agent.com>',
-      subject: 'Verify your email',
+      from: `${process.env.SMTP_FROM_NAME || 'Dolk Agent'} <${process.env.SMTP_USER}>`,
+      subject: 'Verify your email - Dolk Agent',
       html: `
         <h2>Welcome to Dolk Agent!</h2>
         <p>Click the link below to verify your email address:</p>
-        <p><a href="${link}">Verify Email</a></p>
-        <p>Or copy this link: ${link}</p>
+        <p><a href="${link}" style="display:inline-block;padding:10px 20px;background:#6366f1;color:white;text-decoration:none;border-radius:5px;">Verify Email</a></p>
+        <p>Or copy and paste this link in your browser:</p>
+        <p><code>${link}</code></p>
         <p>This link expires in 24 hours.</p>
       `
     });
 
+    console.log('Verification email sent to', email);
     res.json({ ok: true, message: 'Verification email sent' });
   } catch (err) {
     console.error('Send verification email error:', err);
