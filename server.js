@@ -17,9 +17,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 const mongooseOptions = {
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
+  maxPoolSize: 10,
+  minPoolSize: 2,
   retryWrites: true,
   w: 'majority',
-  family: 4
+  family: 4,
+  connectTimeoutMS: 10000,
+  heartbeatFrequencyMS: 30000,
 };
 
 mongoose.connect(process.env.MONGODB_URI, mongooseOptions)
@@ -32,11 +36,15 @@ mongoose.connection.on('connected', () => {
 });
 
 mongoose.connection.on('error', (err) => {
-  console.error('✗ Mongoose connection error:', err);
+  console.error('✗ Mongoose connection error:', err.message);
 });
 
 mongoose.connection.on('disconnected', () => {
-  console.warn('⚠ Mongoose connection disconnected');
+  console.warn('⚠ Mongoose connection disconnected - will auto-reconnect');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('✓ Mongoose reconnected to', mongoose.connection.host);
 });
 
 // Graceful shutdown
@@ -49,9 +57,12 @@ process.on('SIGINT', () => {
 // ─── HEALTH CHECK (Render monitoring) ────────────────────
 app.get('/api/health', (req, res) => {
   const mongoState = mongoose.connection.readyState;
+  const stateNames = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  console.log(`[Health Check] MongoDB state: ${stateNames[mongoState]} (${mongoState})`);
   res.json({
     status: mongoState === 1 ? 'healthy' : 'degraded',
-    mongodb: mongoState === 1 ? 'connected' : 'disconnected',
+    mongodb: stateNames[mongoState],
+    readyState: mongoState,
     timestamp: new Date().toISOString()
   });
 });
